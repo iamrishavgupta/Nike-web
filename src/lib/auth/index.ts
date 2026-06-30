@@ -17,13 +17,6 @@ function buildSocialProviders(): SocialProviders {
     };
   }
 
-  if (process.env.APPLE_CLIENT_ID && process.env.APPLE_CLIENT_SECRET) {
-    providers.apple = {
-      clientId: process.env.APPLE_CLIENT_ID,
-      clientSecret: process.env.APPLE_CLIENT_SECRET,
-    };
-  }
-
   return providers;
 }
 
