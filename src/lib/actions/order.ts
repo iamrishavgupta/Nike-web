@@ -10,9 +10,10 @@ import {
   productImages,
   sizes,
 } from "@/lib/db/schema/index";
-import { eq, inArray, sql, desc } from "drizzle-orm";
+import { eq, inArray, sql, desc, and } from "drizzle-orm";
 import { usdToInr } from "@/lib/utils/currency";
 import { getCurrentUser } from "@/lib/auth/actions";
+import { stripe } from "@/lib/stripe";
 
 export type RequestedItem = { variantId: string; quantity: number };
 
@@ -260,4 +261,56 @@ export async function getUserOrders(): Promise<OrderView[]> {
     createdAt: o.createdAt.toISOString(),
     items: itemsByOrder.get(o.id) ?? [],
   }));
+}
+
+/**
+ * Cancels an order owned by the current user. If it was paid, issues a Stripe
+ * refund, restores stock, and marks the order cancelled. Shipped/delivered
+ * orders can't be cancelled here.
+ */
+export async function cancelOrder(orderId: string): Promise<{ ok: boolean; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "Please sign in to cancel an order." };
+  if (!UUID_RE.test(orderId)) return { ok: false, error: "Invalid order." };
+
+  const [order] = await db
+    .select()
+    .from(orders)
+    .where(and(eq(orders.id, orderId), eq(orders.userId, user.id)));
+
+  if (!order) return { ok: false, error: "Order not found." };
+  if (order.status === "cancelled") return { ok: false, error: "This order is already cancelled." };
+  if (order.status === "shipped" || order.status === "delivered") {
+    return { ok: false, error: "This order has already shipped and can't be cancelled." };
+  }
+
+  // Refund the payment if it was completed.
+  if (order.status === "paid") {
+    const [payment] = await db.select().from(payments).where(eq(payments.orderId, orderId));
+    if (payment?.transactionId && stripe) {
+      try {
+        await stripe.refunds.create({ payment_intent: payment.transactionId });
+      } catch (e) {
+        console.error("Stripe refund failed:", e);
+        return { ok: false, error: "Refund could not be processed. Please contact support." };
+      }
+    }
+    await db.update(payments).set({ status: "failed" }).where(eq(payments.orderId, orderId));
+  }
+
+  // Restore stock for each item.
+  const items = await db
+    .select({ variantId: orderItems.productVariantId, quantity: orderItems.quantity })
+    .from(orderItems)
+    .where(eq(orderItems.orderId, orderId));
+
+  for (const it of items) {
+    await db
+      .update(productVariants)
+      .set({ inStock: sql`${productVariants.inStock} + ${it.quantity}` })
+      .where(eq(productVariants.id, it.variantId));
+  }
+
+  await db.update(orders).set({ status: "cancelled" }).where(eq(orders.id, orderId));
+  return { ok: true };
 }

@@ -4,6 +4,7 @@ import { Package } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/actions";
 import { getUserOrders, type OrderView } from "@/lib/actions/order";
 import { formatRupees } from "@/lib/utils/currency";
+import CancelOrderButton from "@/components/CancelOrderButton";
 
 export const dynamic = "force-dynamic";
 
@@ -107,6 +108,12 @@ export default async function OrdersPage() {
               <span className="text-body text-dark-700">Total</span>
               <span className="text-body-medium text-dark-900">{formatRupees(order.total)}</span>
             </footer>
+
+            {(order.status === "pending" || order.status === "paid") && (
+              <div className="mt-4 flex justify-end">
+                <CancelOrderButton orderId={order.id} />
+              </div>
+            )}
           </section>
         ))}
       </div>
