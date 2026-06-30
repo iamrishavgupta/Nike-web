@@ -20,3 +20,9 @@ export function formatINR(usd: number | null | undefined): string | undefined {
   if (usd === null || usd === undefined || Number.isNaN(usd)) return undefined;
   return inrFormatter.format(usdToInr(usd));
 }
+
+/** Format an amount that is ALREADY in rupees (e.g. stored order totals). */
+export function formatRupees(amount: number | null | undefined): string {
+  if (amount === null || amount === undefined || Number.isNaN(amount)) return "₹0";
+  return inrFormatter.format(amount);
+}

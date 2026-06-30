@@ -111,6 +111,9 @@ export default function Navbar() {
 
           {mounted && user ? (
             <div className="flex items-center gap-3">
+              <Link href="/orders" className="text-body text-dark-900 transition-colors hover:text-dark-700">
+                Orders
+              </Link>
               <span className="text-body text-dark-900">Hi, {user.name?.split(" ")[0] || "there"}</span>
               <button
                 onClick={handleSignOut}
@@ -273,9 +276,9 @@ export default function Navbar() {
             <Link href="/favorites" onClick={() => setOpen(false)} className="flex items-center gap-3 py-2 text-body text-dark-900">
               <Heart className="h-5 w-5 text-dark-700" /> Favourites ({mounted ? favCount : 0})
             </Link>
-            <a href="#" onClick={() => setOpen(false)} className="flex items-center gap-3 py-2 text-body text-dark-900">
+            <Link href="/orders" onClick={() => setOpen(false)} className="flex items-center gap-3 py-2 text-body text-dark-900">
               <Package className="h-5 w-5 text-dark-700" /> Orders
-            </a>
+            </Link>
             {mounted && user ? (
               <button
                 onClick={handleSignOut}

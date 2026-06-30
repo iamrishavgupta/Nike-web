@@ -7,10 +7,12 @@ import {
   payments,
   productVariants,
   products,
+  productImages,
   sizes,
 } from "@/lib/db/schema/index";
-import { eq, inArray, sql } from "drizzle-orm";
+import { eq, inArray, sql, desc } from "drizzle-orm";
 import { usdToInr } from "@/lib/utils/currency";
+import { getCurrentUser } from "@/lib/auth/actions";
 
 export type RequestedItem = { variantId: string; quantity: number };
 
@@ -157,4 +159,105 @@ export async function markOrderPaid(orderId: string, transactionId: string | nul
       transactionId: transactionId ?? null,
     })
     .where(eq(payments.orderId, orderId));
+}
+
+export type OrderItemView = {
+  id: string;
+  name: string;
+  sizeName: string | null;
+  quantity: number;
+  price: number;
+  image: string | null;
+};
+
+export type OrderView = {
+  id: string;
+  status: "pending" | "paid" | "shipped" | "delivered" | "cancelled";
+  total: number;
+  createdAt: string;
+  items: OrderItemView[];
+};
+
+/** Orders for the currently signed-in user, newest first. Amounts are in INR. */
+export async function getUserOrders(): Promise<OrderView[]> {
+  const user = await getCurrentUser();
+  if (!user) return [];
+
+  const orderRows = await db
+    .select({
+      id: orders.id,
+      status: orders.status,
+      total: sql<number>`${orders.totalAmount}::numeric`,
+      createdAt: orders.createdAt,
+    })
+    .from(orders)
+    .where(eq(orders.userId, user.id))
+    .orderBy(desc(orders.createdAt));
+
+  if (!orderRows.length) return [];
+
+  const orderIds = orderRows.map((o) => o.id);
+
+  const itemRows = await db
+    .select({
+      itemId: orderItems.id,
+      orderId: orderItems.orderId,
+      quantity: orderItems.quantity,
+      price: sql<number>`${orderItems.priceAtPurchase}::numeric`,
+      productId: products.id,
+      productName: products.name,
+      sizeName: sizes.name,
+    })
+    .from(orderItems)
+    .innerJoin(productVariants, eq(productVariants.id, orderItems.productVariantId))
+    .innerJoin(products, eq(products.id, productVariants.productId))
+    .leftJoin(sizes, eq(sizes.id, productVariants.sizeId))
+    .where(inArray(orderItems.orderId, orderIds));
+
+  // Primary image per product for thumbnails.
+  const productIds = Array.from(new Set(itemRows.map((r) => r.productId)));
+  const imageMap = new Map<string, string>();
+  if (productIds.length) {
+    const imgRows = await db
+      .select({
+        productId: productImages.productId,
+        url: productImages.url,
+        isPrimary: productImages.isPrimary,
+        sortOrder: productImages.sortOrder,
+      })
+      .from(productImages)
+      .where(inArray(productImages.productId, productIds));
+
+    imgRows
+      .sort((a, b) => {
+        if (a.isPrimary && !b.isPrimary) return -1;
+        if (!a.isPrimary && b.isPrimary) return 1;
+        return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+      })
+      .forEach((r) => {
+        if (!imageMap.has(r.productId)) imageMap.set(r.productId, r.url);
+      });
+  }
+
+  const itemsByOrder = new Map<string, OrderItemView[]>();
+  for (const r of itemRows) {
+    const list = itemsByOrder.get(r.orderId) ?? [];
+    list.push({
+      id: r.itemId,
+      name: r.productName,
+      sizeName: r.sizeName,
+      quantity: r.quantity,
+      price: Number(r.price),
+      image: imageMap.get(r.productId) ?? null,
+    });
+    itemsByOrder.set(r.orderId, list);
+  }
+
+  return orderRows.map((o) => ({
+    id: o.id,
+    status: o.status,
+    total: Number(o.total),
+    createdAt: o.createdAt.toISOString(),
+    items: itemsByOrder.get(o.id) ?? [],
+  }));
 }
