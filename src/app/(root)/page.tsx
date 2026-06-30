@@ -5,6 +5,9 @@ import { getAllProducts } from "@/lib/actions/product";
 import { parseFilterParams } from "@/lib/utils/query";
 import { formatINR } from "@/lib/utils/currency";
 
+// Reads the signed-in user (via headers), so render on demand rather than prerender.
+export const dynamic = "force-dynamic";
+
 const Home = async () => {
   const user = await getCurrentUser();
   console.log("USER:", user);
