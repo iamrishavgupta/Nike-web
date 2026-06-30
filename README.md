@@ -1,4 +1,4 @@
-# Nike Store — E-Commerce
+# Nike Store E-Commerce full Production Ready
 
 A full-stack Nike-style e-commerce app built with Next.js 15, featuring product browsing, authentication, INR pricing, Stripe checkout, and order management.
 
