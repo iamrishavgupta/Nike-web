@@ -7,6 +7,12 @@ import {nextCookies} from "better-auth/next-js";
 
 type SocialProviders = NonNullable<Parameters<typeof betterAuth>[0]["socialProviders"]>;
 
+function resolveBaseURL(): string | undefined {
+  const raw = process.env.BETTER_AUTH_URL;
+  if (!raw) return undefined;
+  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+}
+
 function buildSocialProviders(): SocialProviders {
   const providers: SocialProviders = {};
 
@@ -21,6 +27,7 @@ function buildSocialProviders(): SocialProviders {
 }
 
 export const auth = betterAuth({
+  baseURL: resolveBaseURL(),
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: {
